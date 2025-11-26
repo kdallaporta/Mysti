@@ -3,8 +3,9 @@ import * as fs from 'fs';
 import { ContextManager } from '../managers/ContextManager';
 import { ConversationManager } from '../managers/ConversationManager';
 import { ProviderManager } from '../managers/ProviderManager';
+import { SuggestionManager } from '../managers/SuggestionManager';
 import { getWebviewContent } from '../webview/webviewContent';
-import type { WebviewMessage, Settings, ContextItem } from '../types';
+import type { WebviewMessage, Settings, ContextItem, QuickActionSuggestion, Message } from '../types';
 
 export class ChatViewProvider implements vscode.WebviewViewProvider {
   private _view?: vscode.WebviewView;
@@ -12,17 +13,20 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   private _contextManager: ContextManager;
   private _conversationManager: ConversationManager;
   private _providerManager: ProviderManager;
+  private _suggestionManager: SuggestionManager;
 
   constructor(
     extensionUri: vscode.Uri,
     contextManager: ContextManager,
     conversationManager: ConversationManager,
-    providerManager: ProviderManager
+    providerManager: ProviderManager,
+    suggestionManager: SuggestionManager
   ) {
     this._extensionUri = extensionUri;
     this._contextManager = contextManager;
     this._conversationManager = conversationManager;
     this._providerManager = providerManager;
+    this._suggestionManager = suggestionManager;
   }
 
   public resolveWebviewView(
@@ -116,6 +120,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
       case 'executeQuickAction':
         await this._handleQuickAction(message.payload as string);
+        break;
+
+      case 'executeSuggestion':
+        await this._handleExecuteSuggestion(message.payload as QuickActionSuggestion);
         break;
 
       case 'enhancePrompt':
@@ -322,6 +330,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
               type: 'responseComplete',
               payload: assistantMessage
             });
+            // Trigger async suggestion generation
+            this._generateSuggestionsAsync(assistantMessage);
             break;
         }
       }
@@ -389,6 +399,36 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         type: 'insertPrompt',
         payload: action.prompt
       });
+    }
+  }
+
+  private async _handleExecuteSuggestion(suggestion: QuickActionSuggestion) {
+    this.postMessage({
+      type: 'insertPrompt',
+      payload: suggestion.message
+    });
+  }
+
+  private async _generateSuggestionsAsync(lastMessage: Message) {
+    const conversation = this._conversationManager.getCurrentConversation();
+    if (!conversation) return;
+
+    // Notify UI to show loading skeleton
+    this.postMessage({ type: 'suggestionsLoading' });
+
+    try {
+      const suggestions = await this._suggestionManager.generateSuggestions(
+        conversation,
+        lastMessage
+      );
+
+      this.postMessage({
+        type: 'suggestionsReady',
+        payload: { suggestions }
+      });
+    } catch (error) {
+      console.error('[Mysti] Suggestion generation failed:', error);
+      this.postMessage({ type: 'suggestionsError' });
     }
   }
 

@@ -75,6 +75,17 @@ export interface QuickAction {
   icon?: string;
 }
 
+export type SuggestionColor = 'blue' | 'green' | 'purple' | 'orange' | 'indigo' | 'red' | 'teal' | 'pink' | 'amber';
+
+export interface QuickActionSuggestion {
+  id: string;
+  title: string;        // Short title (3-5 words)
+  description: string;  // Brief description (10-15 words)
+  message: string;      // Full prompt to send when clicked
+  icon: string;         // Single emoji
+  color: SuggestionColor;
+}
+
 export interface SlashCommand {
   name: string;
   description: string;

@@ -112,20 +112,18 @@ export function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.
 
     <!-- Messages area -->
     <div id="messages" class="messages">
-      <div class="welcome-message">
-        <h2>Welcome to Mysti</h2>
-        <p>Your AI coding assistant. Ask me anything about your code!</p>
+      <div class="welcome-container">
+        <div class="welcome-header">
+          <h2>Welcome to Mysti</h2>
+          <p>Your AI coding assistant. Choose an action or ask anything!</p>
+        </div>
+        <div class="welcome-suggestions" id="welcome-suggestions"></div>
       </div>
     </div>
 
-    <!-- Quick actions -->
+    <!-- Quick actions (dynamically populated) -->
     <div id="quick-actions" class="quick-actions">
-      <button class="quick-action-btn" data-action="explain">Explain</button>
-      <button class="quick-action-btn" data-action="refactor">Refactor</button>
-      <button class="quick-action-btn" data-action="fix-bugs">Find bugs</button>
-      <button class="quick-action-btn" data-action="add-tests">Add tests</button>
-      <button class="quick-action-btn" data-action="optimize">Optimize</button>
-      <button class="quick-action-btn" data-action="document">Add docs</button>
+      <!-- Suggestions will be dynamically generated after each response -->
     </div>
 
     <!-- Input area -->
@@ -399,17 +397,93 @@ function getStyles(): string {
       padding: 12px;
     }
 
-    .welcome-message {
-      text-align: center;
-      padding: 40px 20px;
-      color: var(--vscode-descriptionForeground);
+    /* Welcome screen container */
+    .welcome-container {
+      padding: 20px;
+      max-width: 700px;
+      margin: 0 auto;
     }
 
-    .welcome-message h2 {
+    .welcome-header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .welcome-header h2 {
       font-size: 18px;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
       color: var(--vscode-foreground);
     }
+
+    .welcome-header p {
+      color: var(--vscode-descriptionForeground);
+      font-size: 12px;
+    }
+
+    .welcome-suggestions {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .welcome-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      padding: 14px 10px;
+      background: var(--vscode-editor-background);
+      border: 1px solid var(--vscode-widget-border);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .welcome-card:hover {
+      border-color: var(--card-color, var(--vscode-focusBorder));
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      transform: translateY(-2px);
+    }
+
+    .welcome-card:active {
+      transform: translateY(0);
+    }
+
+    .welcome-card-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      margin-bottom: 8px;
+      background: var(--icon-bg, rgba(59,130,246,0.15));
+    }
+
+    .welcome-card-title {
+      font-weight: 600;
+      font-size: 11px;
+      margin-bottom: 3px;
+      color: var(--vscode-foreground);
+    }
+
+    .welcome-card-desc {
+      font-size: 9px;
+      color: var(--vscode-descriptionForeground);
+      line-height: 1.3;
+    }
+
+    /* Welcome card color variants */
+    .welcome-card[data-color="blue"] { --card-color: #3b82f6; --icon-bg: rgba(59,130,246,0.15); }
+    .welcome-card[data-color="green"] { --card-color: #22c55e; --icon-bg: rgba(34,197,94,0.15); }
+    .welcome-card[data-color="purple"] { --card-color: #a855f7; --icon-bg: rgba(168,85,247,0.15); }
+    .welcome-card[data-color="orange"] { --card-color: #f97316; --icon-bg: rgba(249,115,22,0.15); }
+    .welcome-card[data-color="indigo"] { --card-color: #6366f1; --icon-bg: rgba(99,102,241,0.15); }
+    .welcome-card[data-color="red"] { --card-color: #ef4444; --icon-bg: rgba(239,68,68,0.15); }
+    .welcome-card[data-color="teal"] { --card-color: #14b8a6; --icon-bg: rgba(20,184,166,0.15); }
+    .welcome-card[data-color="pink"] { --card-color: #ec4899; --icon-bg: rgba(236,72,153,0.15); }
+    .welcome-card[data-color="amber"] { --card-color: #f59e0b; --icon-bg: rgba(245,158,11,0.15); }
 
     .message {
       margin-bottom: 16px;
@@ -504,14 +578,149 @@ function getStyles(): string {
       color: var(--vscode-charts-purple);
     }
 
+    /* Suggestions container - grid layout for cards */
     .quick-actions {
-      display: flex;
-      gap: 6px;
-      padding: 8px 12px;
-      overflow-x: auto;
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      padding: 12px;
       border-top: 1px solid var(--vscode-panel-border);
+      max-height: 280px;
+      overflow-y: auto;
     }
 
+    .quick-actions.loading {
+      pointer-events: none;
+    }
+
+    @keyframes shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    @keyframes fadeSlideIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Skeleton card loader */
+    .skeleton-card {
+      display: flex;
+      gap: 10px;
+      padding: 10px;
+      border: 1px solid var(--vscode-widget-border);
+      border-radius: 8px;
+      background: var(--vscode-editor-background);
+    }
+
+    .skeleton-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      background: linear-gradient(90deg, var(--vscode-editor-background) 0%, var(--vscode-widget-border) 50%, var(--vscode-editor-background) 100%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s ease-in-out infinite;
+      flex-shrink: 0;
+    }
+
+    .skeleton-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .skeleton-text {
+      height: 10px;
+      border-radius: 4px;
+      background: linear-gradient(90deg, var(--vscode-editor-background) 0%, var(--vscode-widget-border) 50%, var(--vscode-editor-background) 100%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s ease-in-out infinite;
+    }
+
+    .skeleton-card:nth-child(1) { animation-delay: 0s; }
+    .skeleton-card:nth-child(2) { animation-delay: 0.1s; }
+    .skeleton-card:nth-child(3) { animation-delay: 0.2s; }
+    .skeleton-card:nth-child(4) { animation-delay: 0.3s; }
+    .skeleton-card:nth-child(5) { animation-delay: 0.4s; }
+    .skeleton-card:nth-child(6) { animation-delay: 0.5s; }
+
+    /* Suggestion cards */
+    .suggestion-card {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px;
+      background: var(--vscode-editor-background);
+      border: 1px solid var(--vscode-widget-border);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      opacity: 0;
+      animation: fadeSlideIn 0.3s ease forwards;
+      text-align: left;
+    }
+
+    .suggestion-card:hover {
+      border-color: var(--card-color, var(--vscode-focusBorder));
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      transform: translateY(-1px);
+    }
+
+    .suggestion-card:active {
+      transform: translateY(0);
+    }
+
+    .suggestion-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      flex-shrink: 0;
+      background: var(--icon-bg, rgba(59,130,246,0.15));
+    }
+
+    .suggestion-content {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .suggestion-title {
+      font-weight: 600;
+      font-size: 12px;
+      color: var(--vscode-foreground);
+      margin-bottom: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .suggestion-description {
+      font-size: 10px;
+      color: var(--vscode-descriptionForeground);
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      line-height: 1.3;
+    }
+
+    /* Color variants */
+    .suggestion-card[data-color="blue"] { --card-color: #3b82f6; --icon-bg: rgba(59,130,246,0.15); }
+    .suggestion-card[data-color="green"] { --card-color: #22c55e; --icon-bg: rgba(34,197,94,0.15); }
+    .suggestion-card[data-color="purple"] { --card-color: #a855f7; --icon-bg: rgba(168,85,247,0.15); }
+    .suggestion-card[data-color="orange"] { --card-color: #f97316; --icon-bg: rgba(249,115,22,0.15); }
+    .suggestion-card[data-color="indigo"] { --card-color: #6366f1; --icon-bg: rgba(99,102,241,0.15); }
+    .suggestion-card[data-color="red"] { --card-color: #ef4444; --icon-bg: rgba(239,68,68,0.15); }
+    .suggestion-card[data-color="teal"] { --card-color: #14b8a6; --icon-bg: rgba(20,184,166,0.15); }
+    .suggestion-card[data-color="pink"] { --card-color: #ec4899; --icon-bg: rgba(236,72,153,0.15); }
+    .suggestion-card[data-color="amber"] { --card-color: #f59e0b; --icon-bg: rgba(245,158,11,0.15); }
+
+    /* Legacy quick action btn (keep for compatibility) */
     .quick-action-btn {
       background: var(--vscode-button-secondaryBackground);
       color: var(--vscode-button-secondaryForeground);
@@ -2168,6 +2377,56 @@ function getScript(mermaidUri: string): string {
       const modeIndicator = document.getElementById('mode-indicator');
       const sessionIndicator = document.getElementById('session-indicator');
 
+      // Welcome screen suggestions
+      var WELCOME_SUGGESTIONS = [
+        { id: 'understand', title: 'Understand Project', description: 'Analyze structure & architecture', message: 'Help me understand this project. Analyze the codebase structure, key files, technologies used, and how everything connects.', icon: '🔍', color: 'blue' },
+        { id: 'review', title: 'Code Review', description: 'Find issues & improvements', message: 'Review my code for potential issues, bugs, and suggest improvements for better quality and maintainability.', icon: '👀', color: 'purple' },
+        { id: 'cleanup', title: 'Clean Up', description: 'Remove dead code & organize', message: 'Help me clean up this codebase. Find dead code, unused imports, redundant files, and suggest organization improvements.', icon: '🧹', color: 'green' },
+        { id: 'tests', title: 'Write Tests', description: 'Add test coverage', message: 'Help me write tests for this project. Identify untested code and create comprehensive unit and integration tests.', icon: '🧪', color: 'teal' },
+        { id: 'security', title: 'Security Audit', description: 'Find vulnerabilities', message: 'Perform a security audit. Check for vulnerabilities, exposed secrets, injection risks, and OWASP top 10 issues.', icon: '🔒', color: 'red' },
+        { id: 'performance', title: 'Performance', description: 'Optimize for speed', message: 'Analyze performance bottlenecks and suggest optimizations for better speed and resource efficiency.', icon: '⚡', color: 'amber' },
+        { id: 'docs', title: 'Documentation', description: 'Improve docs & comments', message: 'Help me improve documentation. Add JSDoc comments, update README, and document complex logic.', icon: '📝', color: 'indigo' },
+        { id: 'refactor', title: 'Refactor', description: 'Improve code structure', message: 'Suggest refactoring opportunities. Identify code smells, duplicate code, and ways to improve architecture.', icon: '🔄', color: 'orange' },
+        { id: 'production', title: 'Production Ready', description: 'Prepare for deployment', message: 'Help make this project production-ready. Check error handling, logging, environment configs, and best practices.', icon: '🚀', color: 'green' },
+        { id: 'deploy', title: 'Prep Deployment', description: 'Set up CI/CD', message: 'Help me prepare for deployment. Set up CI/CD pipelines, Docker configs, and deployment scripts.', icon: '📦', color: 'purple' },
+        { id: 'compliance', title: 'Compliance', description: 'Check licensing & regs', message: 'Check for compliance issues. Review licenses, dependencies, accessibility, and regulatory requirements.', icon: '✅', color: 'blue' },
+        { id: 'debug', title: 'Debug Issue', description: 'Help diagnose problems', message: 'Help me debug an issue in my code. I will describe the problem and you help me find the root cause.', icon: '🐛', color: 'red' }
+      ];
+
+      function renderWelcomeSuggestions() {
+        var container = document.getElementById('welcome-suggestions');
+        if (!container) return;
+        container.innerHTML = '';
+
+        WELCOME_SUGGESTIONS.forEach(function(s) {
+          var card = document.createElement('button');
+          card.className = 'welcome-card';
+          card.setAttribute('data-color', s.color);
+          card.title = s.message;
+
+          card.innerHTML =
+            '<div class="welcome-card-icon">' + s.icon + '</div>' +
+            '<div class="welcome-card-title">' + escapeHtml(s.title) + '</div>' +
+            '<div class="welcome-card-desc">' + escapeHtml(s.description) + '</div>';
+
+          card.onclick = function() {
+            vscode.postMessage({
+              type: 'sendMessage',
+              payload: {
+                content: s.message,
+                context: state.context,
+                settings: state.settings
+              }
+            });
+          };
+
+          container.appendChild(card);
+        });
+      }
+
+      // Render welcome suggestions on load
+      renderWelcomeSuggestions();
+
       sendBtn.addEventListener('click', sendMessage);
       inputEl.addEventListener('keydown', function(e) {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -2245,13 +2504,6 @@ function getScript(mermaidUri: string): string {
         });
       });
 
-      document.querySelectorAll('.quick-action-btn').forEach(function(btn) {
-        btn.addEventListener('click', function() {
-          var action = btn.dataset.action;
-          vscode.postMessage({ type: 'executeQuickAction', payload: action });
-        });
-      });
-
       enhanceBtn.addEventListener('click', function() {
         if (inputEl.value.trim()) {
           vscode.postMessage({ type: 'enhancePrompt', payload: inputEl.value });
@@ -2293,6 +2545,15 @@ function getScript(mermaidUri: string): string {
           case 'responseComplete':
             hideLoading();
             finalizeStreamingMessage(message.payload);
+            break;
+          case 'suggestionsLoading':
+            showSuggestionSkeleton();
+            break;
+          case 'suggestionsReady':
+            renderSuggestions(message.payload.suggestions);
+            break;
+          case 'suggestionsError':
+            renderFallbackSuggestions();
             break;
           case 'toolUse':
             handleToolUse(message.payload);
@@ -2455,7 +2716,7 @@ function getScript(mermaidUri: string): string {
       }
 
       function addMessage(msg) {
-        var welcome = messagesEl.querySelector('.welcome-message');
+        var welcome = messagesEl.querySelector('.welcome-container');
         if (welcome) welcome.remove();
 
         var div = document.createElement('div');
@@ -2760,6 +3021,64 @@ function getScript(mermaidUri: string): string {
         if (loading) loading.remove();
       }
 
+      // Dynamic suggestions functions (ezorro-style cards)
+      function showSuggestionSkeleton() {
+        var container = document.getElementById('quick-actions');
+        container.classList.add('loading');
+        container.innerHTML = '';
+
+        for (var i = 0; i < 6; i++) {
+          var card = document.createElement('div');
+          card.className = 'skeleton-card';
+          card.style.animationDelay = (i * 0.1) + 's';
+          card.innerHTML =
+            '<div class="skeleton-icon"></div>' +
+            '<div class="skeleton-content">' +
+              '<div class="skeleton-text" style="width: 60%;"></div>' +
+              '<div class="skeleton-text" style="width: 90%;"></div>' +
+            '</div>';
+          container.appendChild(card);
+        }
+      }
+
+      function renderSuggestions(suggestions) {
+        var container = document.getElementById('quick-actions');
+        container.classList.remove('loading');
+        container.innerHTML = '';
+
+        suggestions.forEach(function(s, i) {
+          var card = document.createElement('button');
+          card.className = 'suggestion-card';
+          card.setAttribute('data-color', s.color || 'blue');
+          card.style.animationDelay = (i * 0.08) + 's';
+          card.title = s.message;
+
+          card.innerHTML =
+            '<div class="suggestion-icon">' + (s.icon || '💡') + '</div>' +
+            '<div class="suggestion-content">' +
+              '<div class="suggestion-title">' + escapeHtml(s.title) + '</div>' +
+              '<div class="suggestion-description">' + escapeHtml(s.description) + '</div>' +
+            '</div>';
+
+          card.onclick = function() {
+            vscode.postMessage({ type: 'executeSuggestion', payload: s });
+          };
+
+          container.appendChild(card);
+        });
+      }
+
+      function renderFallbackSuggestions() {
+        renderSuggestions([
+          { id: 'continue', title: 'Continue', description: 'Continue with more details', message: 'Please continue', icon: '➡️', color: 'blue' },
+          { id: 'elaborate', title: 'Elaborate', description: 'Expand on this explanation', message: 'Can you elaborate on this?', icon: '📖', color: 'purple' },
+          { id: 'example', title: 'Show Example', description: 'See a practical code example', message: 'Can you show me an example?', icon: '💻', color: 'green' },
+          { id: 'alternative', title: 'Alternatives', description: 'Explore other approaches', message: 'What are alternative approaches?', icon: '🔄', color: 'orange' },
+          { id: 'optimize', title: 'Optimize', description: 'Improve performance or code quality', message: 'How can I optimize this?', icon: '⚡', color: 'amber' },
+          { id: 'tests', title: 'Add Tests', description: 'Write tests for this code', message: 'Can you write tests for this?', icon: '🧪', color: 'teal' }
+        ]);
+      }
+
       function finalizeStreamingMessage(msg) {
         var streamingEl = messagesEl.querySelector('.message.streaming');
         if (streamingEl) {
@@ -2788,7 +3107,8 @@ function getScript(mermaidUri: string): string {
       }
 
       function clearMessages() {
-        messagesEl.innerHTML = '<div class="welcome-message"><h2>Welcome to Mysti</h2><p>Your AI coding assistant. Ask me anything about your code!</p></div>';
+        messagesEl.innerHTML = '<div class="welcome-container"><div class="welcome-header"><h2>Welcome to Mysti</h2><p>Your AI coding assistant. Choose an action or ask anything!</p></div><div class="welcome-suggestions" id="welcome-suggestions"></div></div>';
+        renderWelcomeSuggestions();
       }
 
       function updateContext(context) {
