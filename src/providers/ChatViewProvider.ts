@@ -109,11 +109,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   private async _handleMessage(message: WebviewMessage) {
     switch (message.type) {
       case 'sendMessage':
-        await this._handleSendMessage(message.payload as {
-          content: string;
-          context: ContextItem[];
-          settings: Settings;
-        });
+        await this._handleSendMessage(
+          message.payload as {
+            content: string;
+            context: ContextItem[];
+            settings: Settings;
+          },
+          (message as any).panelId
+        );
         break;
 
       case 'cancelRequest':
@@ -365,46 +368,63 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  private async _handleSendMessage(payload: {
-    content: string;
-    context: ContextItem[];
-    settings: Settings;
-  }) {
+  private async _handleSendMessage(
+    payload: {
+      content: string;
+      context: ContextItem[];
+      settings: Settings;
+    },
+    panelId: string
+  ) {
     this._requestCancelled = false;
     const { content, context, settings } = payload;
 
-    // Add user message to conversation
-    const userMessage = this._conversationManager.addMessage('user', content, context);
-    this.postMessage({
+    // Get the panel's conversation
+    const panelState = this._panelStates.get(panelId);
+    const conversationId = panelState?.currentConversationId;
+    const conversation = conversationId
+      ? this._conversationManager.getConversation(conversationId)
+      : null;
+
+    // Add user message to this panel's conversation
+    const userMessage = this._conversationManager.addMessageToConversation(
+      conversationId,
+      'user',
+      content,
+      context
+    );
+    this._postToPanel(panelId, {
       type: 'messageAdded',
       payload: userMessage
     });
 
     // Generate AI title for first user message
-    const currentConv = this._conversationManager.getCurrentConversation();
-    if (currentConv && this._conversationManager.isFirstUserMessage(currentConv.id)) {
-      this._generateTitleAsync(currentConv.id, content);
+    if (conversationId && this._conversationManager.isFirstUserMessage(conversationId)) {
+      this._generateTitleAsync(conversationId, content, panelId);
     }
 
     // Stream response from provider
     try {
-      this.postMessage({ type: 'responseStarted' });
+      this._postToPanel(panelId, { type: 'responseStarted' });
 
       const stream = this._providerManager.sendMessage(
         content,
         context,
         settings,
-        this._conversationManager.getCurrentConversation()
+        conversation
       );
 
       let assistantContent = '';
       let thinkingContent = '';
 
       for await (const chunk of stream) {
+        // Check if request was cancelled
+        if (this._requestCancelled) break;
+
         switch (chunk.type) {
           case 'text':
             assistantContent += chunk.content || '';
-            this.postMessage({
+            this._postToPanel(panelId, {
               type: 'responseChunk',
               payload: { type: 'text', content: chunk.content }
             });
@@ -412,58 +432,59 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
           case 'thinking':
             thinkingContent += chunk.content || '';
-            this.postMessage({
+            this._postToPanel(panelId, {
               type: 'responseChunk',
               payload: { type: 'thinking', content: chunk.content }
             });
             break;
 
           case 'tool_use':
-            this.postMessage({
+            this._postToPanel(panelId, {
               type: 'toolUse',
               payload: chunk.toolCall
             });
             break;
 
           case 'tool_result':
-            this.postMessage({
+            this._postToPanel(panelId, {
               type: 'toolResult',
               payload: chunk.toolCall
             });
             break;
 
           case 'error':
-            this.postMessage({
+            this._postToPanel(panelId, {
               type: 'error',
               payload: chunk.content
             });
             break;
 
           case 'session_active':
-            this.postMessage({
+            this._postToPanel(panelId, {
               type: 'sessionActive',
               payload: { sessionId: chunk.sessionId }
             });
             break;
 
           case 'done':
-            const assistantMessage = this._conversationManager.addMessage(
+            const assistantMessage = this._conversationManager.addMessageToConversation(
+              conversationId,
               'assistant',
               assistantContent,
               undefined,
               thinkingContent
             );
-            this.postMessage({
+            this._postToPanel(panelId, {
               type: 'responseComplete',
               payload: assistantMessage
             });
             // Trigger async suggestion generation
-            this._generateSuggestionsAsync(assistantMessage);
+            this._generateSuggestionsAsync(assistantMessage, panelId);
             break;
         }
       }
     } catch (error) {
-      this.postMessage({
+      this._postToPanel(panelId, {
         type: 'error',
         payload: error instanceof Error ? error.message : 'An unknown error occurred'
       });
@@ -473,14 +494,21 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   /**
    * Generate conversation title asynchronously using AI
    */
-  private async _generateTitleAsync(conversationId: string, userMessage: string) {
+  private async _generateTitleAsync(conversationId: string, userMessage: string, panelId?: string) {
     try {
       const title = await this._suggestionManager.generateTitle(userMessage);
       this._conversationManager.updateConversationTitle(conversationId, title);
-      this.postMessage({
-        type: 'titleUpdated',
-        payload: { conversationId, title }
-      });
+      if (panelId) {
+        this._postToPanel(panelId, {
+          type: 'titleUpdated',
+          payload: { conversationId, title }
+        });
+      } else {
+        this.postMessage({
+          type: 'titleUpdated',
+          payload: { conversationId, title }
+        });
+      }
     } catch (error) {
       console.error('[Mysti] Failed to generate title:', error);
     }
@@ -694,15 +722,29 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     });
   }
 
-  private async _generateSuggestionsAsync(lastMessage: Message) {
+  private async _generateSuggestionsAsync(lastMessage: Message, panelId?: string) {
     // Don't generate suggestions if request was cancelled
     if (this._requestCancelled) return;
 
-    const conversation = this._conversationManager.getCurrentConversation();
+    // Get conversation for this panel or fallback to current
+    let conversation;
+    if (panelId) {
+      const panelState = this._panelStates.get(panelId);
+      const conversationId = panelState?.currentConversationId;
+      conversation = conversationId
+        ? this._conversationManager.getConversation(conversationId)
+        : null;
+    } else {
+      conversation = this._conversationManager.getCurrentConversation();
+    }
     if (!conversation) return;
 
-    // Notify UI to show loading skeleton
-    this.postMessage({ type: 'suggestionsLoading' });
+    // Notify UI to show loading skeleton - route to specific panel if provided
+    if (panelId) {
+      this._postToPanel(panelId, { type: 'suggestionsLoading' });
+    } else {
+      this.postMessage({ type: 'suggestionsLoading' });
+    }
 
     try {
       const suggestions = await this._suggestionManager.generateSuggestions(
@@ -710,13 +752,24 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         lastMessage
       );
 
-      this.postMessage({
-        type: 'suggestionsReady',
-        payload: { suggestions }
-      });
+      if (panelId) {
+        this._postToPanel(panelId, {
+          type: 'suggestionsReady',
+          payload: { suggestions }
+        });
+      } else {
+        this.postMessage({
+          type: 'suggestionsReady',
+          payload: { suggestions }
+        });
+      }
     } catch (error) {
       console.error('[Mysti] Suggestion generation failed:', error);
-      this.postMessage({ type: 'suggestionsError' });
+      if (panelId) {
+        this._postToPanel(panelId, { type: 'suggestionsError' });
+      } else {
+        this.postMessage({ type: 'suggestionsError' });
+      }
     }
   }
 

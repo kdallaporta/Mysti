@@ -3147,7 +3147,7 @@ function getScript(mermaidUri: string, logoUri: string): string {
             '<div class="welcome-card-desc">' + escapeHtml(s.description) + '</div>';
 
           card.onclick = function() {
-            vscode.postMessage({
+            postMessageWithPanelId({
               type: 'sendMessage',
               payload: {
                 content: s.message,
@@ -3959,7 +3959,7 @@ function getScript(mermaidUri: string, logoUri: string): string {
 
         // Check if brainstorm mode is selected (use activeAgent which is set synchronously)
         if (state.activeAgent === 'brainstorm') {
-          vscode.postMessage({
+          postMessageWithPanelId({
             type: 'sendBrainstormMessage',
             payload: {
               content: content,
@@ -3968,7 +3968,7 @@ function getScript(mermaidUri: string, logoUri: string): string {
             }
           });
         } else {
-          vscode.postMessage({
+          postMessageWithPanelId({
             type: 'sendMessage',
             payload: {
               content: content,

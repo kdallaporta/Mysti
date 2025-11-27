@@ -143,6 +143,45 @@ export class ConversationManager {
     return message;
   }
 
+  /**
+   * Add a message to a specific conversation by ID
+   * Used for per-panel message routing
+   */
+  public addMessageToConversation(
+    conversationId: string | null | undefined,
+    role: 'user' | 'assistant' | 'system',
+    content: string,
+    context?: ContextItem[],
+    thinking?: string
+  ): Message {
+    // Get the specific conversation or fall back to current
+    let conversation: Conversation | null = null;
+    if (conversationId) {
+      conversation = this._conversations.get(conversationId) || null;
+    }
+    if (!conversation) {
+      conversation = this.getCurrentConversation();
+    }
+    if (!conversation) {
+      throw new Error('No conversation available');
+    }
+
+    const message: Message = {
+      id: this._generateId(),
+      role,
+      content,
+      timestamp: Date.now(),
+      context,
+      thinking
+    };
+
+    conversation.messages.push(message);
+    conversation.updatedAt = Date.now();
+
+    this._saveConversations();
+    return message;
+  }
+
   public updateMessage(messageId: string, updates: Partial<Message>): boolean {
     const conversation = this.getCurrentConversation();
     if (!conversation) {
