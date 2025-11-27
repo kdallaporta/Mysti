@@ -144,9 +144,9 @@ export function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.
           </svg>
         </button>
         <div id="context-usage" class="context-usage" title="Context usage: 0%">
-          <svg viewBox="0 0 36 36" class="context-pie">
-            <circle class="context-pie-bg" cx="18" cy="18" r="15.91549430918954"/>
-            <circle id="context-pie-fill" class="context-pie-fill" cx="18" cy="18" r="15.91549430918954" stroke-dasharray="0 100" stroke-dashoffset="25"/>
+          <svg viewBox="0 0 32 32" class="context-pie">
+            <circle class="context-pie-bg" cx="16" cy="16" r="14"/>
+            <path id="context-pie-fill" class="context-pie-fill" d=""/>
           </svg>
           <span id="context-usage-text" class="context-usage-text">0%</span>
         </div>
@@ -1141,29 +1141,23 @@ function getStyles(): string {
     .context-pie {
       width: 18px;
       height: 18px;
-      transform: rotate(-90deg);
     }
 
     .context-pie-bg {
-      fill: none;
-      stroke: var(--vscode-input-border);
-      stroke-width: 3;
+      fill: var(--vscode-input-border, #3c3c3c);
     }
 
     .context-pie-fill {
-      fill: none;
-      stroke: var(--vscode-progressBar-background);
-      stroke-width: 3;
-      stroke-linecap: round;
-      transition: stroke-dasharray 0.3s ease;
+      fill: var(--vscode-progressBar-background, #0e639c);
+      transition: d 0.3s ease;
     }
 
     .context-usage.warning .context-pie-fill {
-      stroke: var(--vscode-editorWarning-foreground, #cca700);
+      fill: var(--vscode-editorWarning-foreground, #cca700);
     }
 
     .context-usage.danger .context-pie-fill {
-      stroke: var(--vscode-errorForeground, #f14c4c);
+      fill: var(--vscode-errorForeground, #f14c4c);
     }
 
     .context-usage-text {
@@ -3146,6 +3140,7 @@ function getScript(mermaidUri: string, logoUri: string): string {
 
       let state = {
         panelId: null,  // Unique ID for this panel
+        workspacePath: '',  // Workspace root for relative path display
         settings: {
           mode: 'ask-before-edit',
           thinkingLevel: 'medium',
@@ -3180,6 +3175,30 @@ function getScript(mermaidUri: string, logoUri: string): string {
       function postMessageWithPanelId(msg) {
         msg.panelId = state.panelId;
         vscode.postMessage(msg);
+      }
+
+      // Helper to convert absolute paths to relative paths
+      function makeRelativePath(absolutePath) {
+        if (!absolutePath || !state.workspacePath) return absolutePath;
+        // Normalize path separators
+        var normalizedPath = absolutePath.replace(/\\\\/g, '/');
+        var normalizedWorkspace = state.workspacePath.replace(/\\\\/g, '/');
+        // Remove workspace prefix if present
+        if (normalizedPath.startsWith(normalizedWorkspace)) {
+          var relative = normalizedPath.substring(normalizedWorkspace.length);
+          // Remove leading slash
+          return relative.startsWith('/') ? relative.substring(1) : relative;
+        }
+        return absolutePath;
+      }
+
+      // Helper to replace absolute paths with relative paths in a string (for commands)
+      function cleanPathsInString(str) {
+        if (!str || !state.workspacePath) return str;
+        var normalizedWorkspace = state.workspacePath.replace(/\\\\/g, '/');
+        // Replace workspace path with ./ or just remove it
+        return str.split(normalizedWorkspace + '/').join('')
+                  .split(normalizedWorkspace).join('.');
       }
 
       // Autocomplete variables
@@ -3673,8 +3692,14 @@ function getScript(mermaidUri: string, logoUri: string): string {
             var responsePayload = message.payload || {};
             finalizeStreamingMessage(responsePayload.message || responsePayload);
             // Update context usage from response
+            // Total context = input_tokens + cache_read_input_tokens (cached context being used)
             if (responsePayload.usage) {
-              updateContextUsage(responsePayload.usage.input_tokens, null);
+              var totalContextTokens = (responsePayload.usage.input_tokens || 0) +
+                                       (responsePayload.usage.cache_read_input_tokens || 0);
+              console.log('[Mysti Webview] Context usage - input:', responsePayload.usage.input_tokens,
+                          'cached:', responsePayload.usage.cache_read_input_tokens,
+                          'total:', totalContextTokens);
+              updateContextUsage(totalContextTokens, null);
             }
             break;
           case 'contextWindowInfo':
@@ -4278,17 +4303,30 @@ function getScript(mermaidUri: string, logoUri: string): string {
 
         switch (name) {
           case 'bash':
-            return input.command || '';
+            // Show description if available (often contains what the command does)
+            // Otherwise show command with paths cleaned up
+            if (input.description) {
+              return cleanPathsInString(input.description);
+            }
+            return cleanPathsInString(input.command || '');
           case 'read':
-            return input.file_path || input.path || '';
+            return makeRelativePath(input.file_path || input.path || '');
           case 'write':
-            return input.file_path || input.path || '';
+            return makeRelativePath(input.file_path || input.path || '');
           case 'edit':
-            return input.file_path || input.path || '';
+            return makeRelativePath(input.file_path || input.path || '');
+          case 'notebookedit':
+            return makeRelativePath(input.notebook_path || input.path || '');
           case 'glob':
-            return input.pattern || '';
+            // Show pattern and relative path if specified
+            var globPattern = input.pattern || '';
+            var globPath = input.path ? makeRelativePath(input.path) : '';
+            return globPath ? globPattern + ' in ' + globPath : globPattern;
           case 'grep':
-            return input.pattern || '';
+            // Show pattern and relative path if specified
+            var grepPattern = input.pattern || '';
+            var grepPath = input.path ? makeRelativePath(input.path) : '';
+            return grepPath ? grepPattern + ' in ' + grepPath : grepPattern;
           case 'webfetch':
             return input.url || '';
           case 'websearch':
@@ -4299,8 +4337,10 @@ function getScript(mermaidUri: string, logoUri: string): string {
             var todos = input.todos || [];
             return todos.length + ' item' + (todos.length !== 1 ? 's' : '');
           default:
-            // Try common field names
-            return input.file_path || input.path || input.command || input.query || input.pattern || '';
+            // Try common field names - apply makeRelativePath to potential file paths
+            var filePath = input.file_path || input.path || '';
+            if (filePath) return makeRelativePath(filePath);
+            return cleanPathsInString(input.command || '') || input.query || input.pattern || '';
         }
       }
 
@@ -4623,8 +4663,24 @@ function getScript(mermaidUri: string, logoUri: string): string {
         var usageContainer = document.getElementById('context-usage');
 
         if (pieFill && usageText && usageContainer) {
-          // Update pie chart fill (stroke-dasharray: filled empty)
-          pieFill.setAttribute('stroke-dasharray', percentage + ' ' + (100 - percentage));
+          // Calculate pie slice path
+          // Center at (16,16), radius 14, starting from top (12 o'clock)
+          var cx = 16, cy = 16, r = 14;
+          if (percentage <= 0) {
+            pieFill.setAttribute('d', '');
+          } else if (percentage >= 100) {
+            // Full circle
+            pieFill.setAttribute('d', 'M ' + cx + ' ' + (cy - r) + ' A ' + r + ' ' + r + ' 0 1 1 ' + (cx - 0.001) + ' ' + (cy - r) + ' Z');
+          } else {
+            // Calculate end point of arc
+            var angle = (percentage / 100) * 2 * Math.PI;
+            var endX = cx + r * Math.sin(angle);
+            var endY = cy - r * Math.cos(angle);
+            var largeArc = percentage > 50 ? 1 : 0;
+            // Path: Move to center, line to top, arc to end point, close
+            var d = 'M ' + cx + ' ' + cy + ' L ' + cx + ' ' + (cy - r) + ' A ' + r + ' ' + r + ' 0 ' + largeArc + ' 1 ' + endX + ' ' + endY + ' Z';
+            pieFill.setAttribute('d', d);
+          }
 
           // Update percentage text
           usageText.textContent = percentage + '%';
@@ -4844,8 +4900,9 @@ function getScript(mermaidUri: string, logoUri: string): string {
           diffLines: []
         };
 
-        // Extract file path
-        info.filePath = input.file_path || input.path || input.notebook_path || '';
+        // Extract file path (convert to relative for display)
+        var absolutePath = input.file_path || input.path || input.notebook_path || '';
+        info.filePath = makeRelativePath(absolutePath);
         if (info.filePath) {
           var parts = info.filePath.replace(/\\\\/g, '/').split('/');
           info.fileName = parts.pop() || info.filePath;

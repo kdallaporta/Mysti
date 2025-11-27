@@ -218,6 +218,7 @@ export class ClaudeCodeProvider extends BaseCliProvider {
               cache_creation_input_tokens: usage.cache_creation_input_tokens,
               cache_read_input_tokens: usage.cache_read_input_tokens
             };
+            console.log('[Mysti] Claude: Captured usage from message_delta:', this._lastUsageStats);
           }
           return null;
         }
@@ -329,6 +330,7 @@ export class ClaudeCodeProvider extends BaseCliProvider {
   getStoredUsage(): { input_tokens: number; output_tokens: number; cache_creation_input_tokens?: number; cache_read_input_tokens?: number } | null {
     const usage = this._lastUsageStats;
     this._lastUsageStats = null;
+    console.log('[Mysti] Claude: getStoredUsage returning:', usage);
     return usage;
   }
 

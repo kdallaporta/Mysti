@@ -93,6 +93,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       ? this._conversationManager.getConversation(panelState.currentConversationId)
       : this._conversationManager.getCurrentConversation();
 
+    // Get workspace path for relative path display
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    const workspacePath = workspaceFolders ? workspaceFolders[0].uri.fsPath : '';
+
     this._postToPanel(panelId, {
       type: 'initialState',
       payload: {
@@ -102,7 +106,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         conversation,
         providers: this._providerManager.getProviders(),
         slashCommands: this._getSlashCommands(),
-        quickActions: this._getQuickActions()
+        quickActions: this._getQuickActions(),
+        workspacePath
       }
     });
   }
@@ -373,7 +378,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     }
 
     try {
-      const content = await fs.promises.readFile(payload.filePath, 'utf-8');
+      const resolvedPath = this._resolveFilePath(payload.filePath);
+      const content = await fs.promises.readFile(resolvedPath, 'utf-8');
       let lineNumber = 1;
       const searchIndex = content.indexOf(payload.searchText);
       if (searchIndex !== -1) {
@@ -401,7 +407,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
   private async _handleRevertFileEdit(payload: { path: string }, panelId?: string) {
     try {
-      const uri = vscode.Uri.file(payload.path);
+      const uri = vscode.Uri.file(this._resolveFilePath(payload.path));
 
       // Try to use git to revert the file
       try {
@@ -550,6 +556,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             // Capture usage stats if present in this chunk
             if (chunk.usage) {
               lastUsage = chunk.usage;
+              console.log('[Mysti] Done chunk has usage:', chunk.usage);
+            } else {
+              console.log('[Mysti] Done chunk has NO usage');
             }
             const assistantMessage = this._conversationManager.addMessageToConversation(
               conversationId,
@@ -558,6 +567,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
               undefined,
               thinkingContent
             );
+            console.log('[Mysti] Sending responseComplete with usage:', lastUsage);
             this._postToPanel(panelId, {
               type: 'responseComplete',
               payload: {
@@ -933,8 +943,24 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
+  /**
+   * Resolve a file path (relative or absolute) to an absolute path
+   */
+  private _resolveFilePath(filePath: string): string {
+    // If already absolute (Unix or Windows), return as-is
+    if (filePath.startsWith('/') || filePath.match(/^[A-Za-z]:/)) {
+      return filePath;
+    }
+    // Resolve relative path against workspace root
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (workspaceFolders) {
+      return vscode.Uri.joinPath(workspaceFolders[0].uri, filePath).fsPath;
+    }
+    return filePath;
+  }
+
   private async _handleOpenFile(payload: { path: string; line?: number }) {
-    const uri = vscode.Uri.file(payload.path);
+    const uri = vscode.Uri.file(this._resolveFilePath(payload.path));
     const document = await vscode.workspace.openTextDocument(uri);
     const editor = await vscode.window.showTextDocument(document);
     if (payload.line !== undefined) {
@@ -953,7 +979,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     },
     panelId?: string
   ) {
-    const uri = vscode.Uri.file(payload.path);
+    const uri = vscode.Uri.file(this._resolveFilePath(payload.path));
     const document = await vscode.workspace.openTextDocument(uri);
     const editor = await vscode.window.showTextDocument(document);
 
@@ -1211,6 +1237,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         retainContextWhenHidden: true
       }
     );
+
+    // Set the tab icon to Mysti logo
+    panel.iconPath = vscode.Uri.joinPath(this._extensionUri, 'resources', 'Mysti-Logo.png');
 
     panel.webview.html = getWebviewContent(panel.webview, this._extensionUri);
 
