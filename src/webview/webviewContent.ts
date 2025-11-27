@@ -158,7 +158,10 @@ export function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.
         <span id="mode-indicator" class="mode-indicator">Ask before edit</span>
       </div>
       <div class="input-container">
-        <textarea id="message-input" placeholder="Ask Mysti..." rows="1"></textarea>
+        <div class="input-wrapper">
+          <textarea id="message-input" placeholder="Ask Mysti..." rows="1"></textarea>
+          <div id="autocomplete-ghost" class="autocomplete-ghost"></div>
+        </div>
         <button id="send-btn" class="send-btn" title="Send message">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
             <path d="M15.854.146a.5.5 0 0 1 .11.54l-5.819 14.547a.75.75 0 0 1-1.329.124l-3.178-4.995L.643 7.184a.75.75 0 0 1 .124-1.33L15.314.037a.5.5 0 0 1 .54.11zM6.636 10.07l2.761 4.338L14.13 2.576 6.636 10.07zm6.787-8.201L1.591 6.602l4.339 2.76 7.494-7.493z"/>
@@ -191,10 +194,10 @@ export function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.
         <span class="agent-item-name">OpenAI Codex</span>
       </div>
       <div class="agent-menu-divider"></div>
-      <div class="agent-menu-item brainstorm-toggle" data-action="brainstorm">
-        <span class="agent-item-icon">🧠</span>
-        <span class="agent-item-name">Brainstorm Mode</span>
-        <span id="brainstorm-status" class="agent-item-status">Off</span>
+      <div class="agent-menu-item" data-agent="brainstorm">
+        <span class="agent-item-dot" style="background: #F59E0B;"></span>
+        <span class="agent-item-name">Brainstorm</span>
+        <span class="agent-item-desc">Both agents collaborate</span>
       </div>
     </div>
   </div>
@@ -827,8 +830,35 @@ function getStyles(): string {
       align-items: flex-end;
     }
 
-    #message-input {
+    .input-wrapper {
       flex: 1;
+      position: relative;
+    }
+
+    .autocomplete-ghost {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      padding: 8px 12px;
+      pointer-events: none;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      font-family: var(--vscode-font-family);
+      font-size: var(--vscode-font-size);
+      line-height: 1.4;
+      color: var(--vscode-input-placeholderForeground);
+      opacity: 0.6;
+      overflow: hidden;
+    }
+
+    .autocomplete-ghost .ghost-text {
+      color: var(--vscode-textLink-foreground);
+      opacity: 0.7;
+    }
+
+    #message-input {
+      width: 100%;
       padding: 8px 12px;
       border: 1px solid var(--vscode-input-border);
       background: var(--vscode-input-background);
@@ -991,6 +1021,12 @@ function getStyles(): string {
 
     .agent-item-status.active {
       color: #22c55e;
+    }
+
+    .agent-item-desc {
+      font-size: 10px;
+      color: var(--vscode-descriptionForeground);
+      margin-left: auto;
     }
 
     .agent-menu-divider {
@@ -1324,16 +1360,6 @@ function getStyles(): string {
 
     .brainstorm-error .error-icon {
       margin-right: 8px;
-    }
-
-    /* Agent button active state */
-    .agent-btn.brainstorm-active {
-      background: linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(16, 185, 129, 0.2) 100%);
-      border-color: rgba(139, 92, 246, 0.5);
-    }
-
-    .brainstorm-toggle.active {
-      background: linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(16, 185, 129, 0.2) 100%);
     }
 
     .loading {
@@ -2776,7 +2802,8 @@ function getScript(mermaidUri: string): string {
         var checkLines = Math.min(lines.length, 20);
         for (var i = 0; i < checkLines; i++) {
           var line = lines[i];
-          if (line.startsWith('+') || line.startsWith('-') || line.startsWith('@@')) {
+          // Exclude CSS custom properties (--var) from diff detection
+          if (line.startsWith('+') || (line.startsWith('-') && !line.startsWith('--')) || line.startsWith('@@')) {
             diffMarkers++;
           }
         }
@@ -2910,14 +2937,23 @@ function getScript(mermaidUri: string): string {
         quickActions: [],
         // Brainstorm mode state
         activeAgent: 'claude-code',
-        brainstormEnabled: false,
         brainstormSession: null,
         brainstormPhase: null,
-        agentResponses: {}
+        agentResponses: {},
+        // Autocomplete state
+        autocompleteSuggestion: null,
+        autocompleteType: null
       };
+
+      // Autocomplete variables
+      var autocompleteDebounceTimer = null;
+      var tabHoldStart = 0;
+      var tabHoldTimer = null;
+      var currentCompletionLevel = 'sentence'; // Track current level during hold
 
       const messagesEl = document.getElementById('messages');
       const inputEl = document.getElementById('message-input');
+      const autocompleteGhostEl = document.getElementById('autocomplete-ghost');
       const sendBtn = document.getElementById('send-btn');
       const settingsBtn = document.getElementById('settings-btn');
       const settingsPanel = document.getElementById('settings-panel');
@@ -2992,13 +3028,73 @@ function getScript(mermaidUri: string): string {
 
       sendBtn.addEventListener('click', sendMessage);
       inputEl.addEventListener('keydown', function(e) {
+        // Tab key handling for autocomplete (hold-duration based)
+        if (e.key === 'Tab' && state.autocompleteSuggestion) {
+          e.preventDefault();
+
+          // Only start hold tracking on first keydown (not repeat)
+          if (!tabHoldStart) {
+            tabHoldStart = Date.now();
+            currentCompletionLevel = 'sentence';
+
+            // Accept sentence completion immediately
+            acceptAutocomplete();
+
+            // Set up progressive completion while holding
+            tabHoldTimer = setInterval(function() {
+              var holdDuration = Date.now() - tabHoldStart;
+
+              if (holdDuration > 600 && currentCompletionLevel !== 'message') {
+                // After 600ms, upgrade to message completion
+                currentCompletionLevel = 'message';
+                vscode.postMessage({
+                  type: 'requestAutocomplete',
+                  payload: { text: inputEl.value, type: 'message' }
+                });
+                // Stop checking after message level
+                if (tabHoldTimer) {
+                  clearInterval(tabHoldTimer);
+                  tabHoldTimer = null;
+                }
+              } else if (holdDuration > 300 && currentCompletionLevel === 'sentence') {
+                // After 300ms, upgrade to paragraph completion
+                currentCompletionLevel = 'paragraph';
+                vscode.postMessage({
+                  type: 'requestAutocomplete',
+                  payload: { text: inputEl.value, type: 'paragraph' }
+                });
+              }
+            }, 50); // Check every 50ms for responsive feel
+          }
+          return;
+        }
+
+        // Escape to dismiss autocomplete
+        if (e.key === 'Escape' && state.autocompleteSuggestion) {
+          clearAutocomplete();
+          return;
+        }
+
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
+          clearAutocomplete();
           sendMessage();
         }
         if (e.key === '/' && inputEl.value === '') {
           e.preventDefault();
           showSlashMenu();
+        }
+      });
+
+      // Tab key release handler
+      inputEl.addEventListener('keyup', function(e) {
+        if (e.key === 'Tab') {
+          tabHoldStart = 0;
+          if (tabHoldTimer) {
+            clearInterval(tabHoldTimer);
+            tabHoldTimer = null;
+          }
+          currentCompletionLevel = 'sentence';
         }
       });
 
@@ -3008,6 +3104,24 @@ function getScript(mermaidUri: string): string {
         if (!inputEl.value.startsWith('/')) {
           hideSlashMenu();
         }
+
+        // Clear current autocomplete when typing
+        clearAutocomplete();
+
+        // Debounce autocomplete request (300ms)
+        if (autocompleteDebounceTimer) {
+          clearTimeout(autocompleteDebounceTimer);
+        }
+        autocompleteDebounceTimer = setTimeout(function() {
+          var text = inputEl.value.trim();
+          if (text && text.length > 3 && !text.startsWith('/') && !state.isLoading) {
+            // Request precompute for instant response when Tab is held
+            vscode.postMessage({
+              type: 'requestAutocomplete',
+              payload: { text: inputEl.value, type: 'sentence', precompute: true }
+            });
+          }
+        }, 300);
       });
 
       settingsBtn.addEventListener('click', function() {
@@ -3094,30 +3208,32 @@ function getScript(mermaidUri: string): string {
         document.querySelectorAll('.agent-menu-item').forEach(function(item) {
           item.addEventListener('click', function() {
             var agent = item.dataset.agent;
-            var action = item.dataset.action;
+            if (agent) {
+              if (agent === 'brainstorm') {
+                // Enable brainstorm mode
+                state.settings.mode = 'brainstorm';
+                state.activeAgent = 'brainstorm';
+                updateAgentMenuSelection();
+                agentMenu.classList.add('hidden');
+                // Notify backend of mode change
+                vscode.postMessage({ type: 'updateSettings', payload: { mode: 'brainstorm' } });
+              } else {
+                // Select single agent, disable brainstorm
+                state.activeAgent = agent;
+                state.settings.provider = agent;
+                state.settings.mode = 'ask'; // Reset to normal mode
 
-            if (action === 'brainstorm') {
-              // Toggle brainstorm mode
-              state.brainstormEnabled = !state.brainstormEnabled;
-              updateBrainstormUI();
-              agentMenu.classList.add('hidden');
-            } else if (agent) {
-              // Select single agent
-              state.activeAgent = agent;
-              state.settings.provider = agent;
-              state.brainstormEnabled = false;
+                // Sync settings dropdown
+                providerSelect.value = agent;
 
-              // Sync settings dropdown
-              providerSelect.value = agent;
+                // Update models for the new provider
+                updateModelsForProvider(agent);
 
-              // Update models for the new provider
-              updateModelsForProvider(agent);
-
-              updateAgentMenuSelection();
-              updateBrainstormUI();
-              agentMenu.classList.add('hidden');
-              // Notify backend of provider change
-              vscode.postMessage({ type: 'updateSettings', payload: { provider: agent } });
+                updateAgentMenuSelection();
+                agentMenu.classList.add('hidden');
+                // Notify backend of provider change
+                vscode.postMessage({ type: 'updateSettings', payload: { provider: agent, mode: 'ask' } });
+              }
             }
           });
         });
@@ -3168,40 +3284,17 @@ function getScript(mermaidUri: string): string {
         var agentNameEl = document.getElementById('agent-name');
         var agentIconEl = document.getElementById('agent-icon');
         if (agentNameEl) {
-          var agentName = state.activeAgent === 'claude-code' ? 'Claude' : 'Codex';
+          var agentName = state.activeAgent === 'claude-code' ? 'Claude' :
+                         state.activeAgent === 'brainstorm' ? 'Brainstorm' : 'Codex';
           agentNameEl.textContent = agentName;
         }
         if (agentIconEl) {
-          agentIconEl.textContent = state.activeAgent === 'claude-code' ? '🟣' : '🟢';
+          agentIconEl.textContent = state.activeAgent === 'claude-code' ? '🟣' :
+                                   state.activeAgent === 'brainstorm' ? '🧠' : '🟢';
         }
-        // Sync settings provider dropdown
-        if (providerSelect && providerSelect.value !== state.activeAgent) {
+        // Sync settings provider dropdown (only for actual providers, not brainstorm)
+        if (providerSelect && state.activeAgent !== 'brainstorm' && providerSelect.value !== state.activeAgent) {
           providerSelect.value = state.activeAgent;
-        }
-      }
-
-      function updateBrainstormUI() {
-        var brainstormToggle = document.querySelector('.brainstorm-toggle');
-        if (brainstormToggle) {
-          var nameEl = brainstormToggle.querySelector('.agent-item-name');
-          if (state.brainstormEnabled) {
-            brainstormToggle.classList.add('active');
-            if (nameEl) nameEl.textContent = 'Brainstorm (Active)';
-          } else {
-            brainstormToggle.classList.remove('active');
-            if (nameEl) nameEl.textContent = 'Brainstorm Mode';
-          }
-        }
-        // Update agent button to show brainstorm status
-        var agentNameEl = document.getElementById('agent-name');
-        var agentIconEl = document.getElementById('agent-icon');
-        if (state.brainstormEnabled) {
-          if (agentNameEl) agentNameEl.textContent = 'Brainstorm';
-          if (agentIconEl) agentIconEl.textContent = '🧠';
-          if (agentSelectBtn) agentSelectBtn.classList.add('brainstorm-active');
-        } else {
-          if (agentSelectBtn) agentSelectBtn.classList.remove('brainstorm-active');
-          updateAgentMenuSelection();
         }
       }
 
@@ -3255,6 +3348,19 @@ function getScript(mermaidUri: string): string {
             break;
           case 'suggestionsError':
             renderFallbackSuggestions();
+            break;
+          case 'autocompleteSuggestion':
+            if (message.payload && message.payload.suggestion) {
+              updateGhostText(message.payload.suggestion);
+              state.autocompleteType = message.payload.type || 'word';
+            }
+            break;
+          case 'autocompleteCleared':
+            if (autocompleteGhostEl) {
+              autocompleteGhostEl.innerHTML = '';
+            }
+            state.autocompleteSuggestion = null;
+            state.autocompleteType = null;
             break;
           case 'toolUse':
             handleToolUse(message.payload);
@@ -3317,16 +3423,13 @@ function getScript(mermaidUri: string): string {
           case 'brainstormError':
             handleBrainstormError(message.payload);
             break;
+          case 'brainstormAgentComplete':
+            handleBrainstormAgentComplete(message.payload);
+            break;
           case 'agentChanged':
             state.activeAgent = message.payload.agent;
             state.settings.provider = message.payload.agent;
-            state.brainstormEnabled = false;
             updateAgentMenuSelection();
-            updateBrainstormUI();
-            break;
-          case 'brainstormToggled':
-            state.brainstormEnabled = message.payload.enabled;
-            updateBrainstormUI();
             break;
         }
       }
@@ -3385,19 +3488,48 @@ function getScript(mermaidUri: string): string {
       function handleBrainstormAgentChunk(payload) {
         var agentId = payload.agentId;
         var content = payload.content || '';
+        var chunkType = payload.type || 'text';
 
-        // Accumulate content
-        if (!state.agentResponses[agentId]) {
-          state.agentResponses[agentId] = '';
-        }
-        state.agentResponses[agentId] += content;
-
-        // Update UI
         var contentEl = document.getElementById('brainstorm-' + (agentId === 'claude-code' ? 'claude' : 'codex') + '-content');
-        if (contentEl) {
-          contentEl.innerHTML = formatContent(state.agentResponses[agentId]);
+        if (!contentEl) return;
+
+        if (chunkType === 'thinking') {
+          // Use same thinking block format as normal mode
+          var thinkingEl = document.createElement('div');
+          thinkingEl.className = 'thinking-block';
+          var thinkingIcon = '<span class="thinking-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M20 2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h14l4 4V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/></svg></span>';
+          thinkingEl.innerHTML = thinkingIcon + '<span class="thinking-content">' + escapeHtml(content) + '</span>';
+          contentEl.appendChild(thinkingEl);
+        } else {
+          // Accumulate text content
+          if (!state.agentResponses[agentId]) {
+            state.agentResponses[agentId] = '';
+          }
+          state.agentResponses[agentId] += content;
+
+          // Find or create text content container
+          var textContainer = contentEl.querySelector('.brainstorm-text-content');
+          if (!textContainer) {
+            textContainer = document.createElement('div');
+            textContainer.className = 'brainstorm-text-content';
+            contentEl.appendChild(textContainer);
+          }
+          // Use formatContent for proper markdown rendering like normal mode
+          textContainer.innerHTML = formatContent(state.agentResponses[agentId]);
         }
         scrollToBottom();
+      }
+
+      function handleBrainstormAgentComplete(payload) {
+        var agentId = payload.agentId;
+        var statusEl = document.querySelector(
+          '.brainstorm-agent-card[data-agent="' + agentId + '"] .brainstorm-agent-status'
+        );
+        if (statusEl) {
+          statusEl.textContent = 'Complete';
+          statusEl.classList.remove('streaming');
+          statusEl.classList.add('complete');
+        }
       }
 
       function handleBrainstormPhaseChange(payload) {
@@ -3596,8 +3728,8 @@ function getScript(mermaidUri: string): string {
           return;
         }
 
-        // Check if brainstorm mode is enabled
-        if (state.brainstormEnabled) {
+        // Check if brainstorm mode is selected (use activeAgent which is set synchronously)
+        if (state.activeAgent === 'brainstorm') {
           vscode.postMessage({
             type: 'sendBrainstormMessage',
             payload: {
@@ -4085,6 +4217,46 @@ function getScript(mermaidUri: string): string {
         slashMenu.classList.add('hidden');
       }
 
+      // Autocomplete helper functions
+      function updateGhostText(suggestion) {
+        if (!autocompleteGhostEl || !suggestion) {
+          clearAutocomplete();
+          return;
+        }
+        // Show the current text plus the suggested completion in ghost style
+        var currentText = inputEl.value;
+        // Create ghost content: invisible current text + visible suggestion
+        var invisiblePart = '<span style="visibility: hidden;">' + escapeHtml(currentText) + '</span>';
+        var ghostPart = '<span class="ghost-text">' + escapeHtml(suggestion) + '</span>';
+        autocompleteGhostEl.innerHTML = invisiblePart + ghostPart;
+        state.autocompleteSuggestion = suggestion;
+      }
+
+      function clearAutocomplete() {
+        if (autocompleteGhostEl) {
+          autocompleteGhostEl.innerHTML = '';
+        }
+        state.autocompleteSuggestion = null;
+        state.autocompleteType = null;
+        // Cancel any pending autocomplete request
+        vscode.postMessage({ type: 'cancelAutocomplete' });
+      }
+
+      function acceptAutocomplete() {
+        if (state.autocompleteSuggestion) {
+          // Append the suggestion to the input
+          inputEl.value = inputEl.value + state.autocompleteSuggestion;
+          // Update textarea height
+          inputEl.style.height = 'auto';
+          inputEl.style.height = Math.min(inputEl.scrollHeight, 150) + 'px';
+          // Clear the ghost text
+          clearAutocomplete();
+          // Focus at the end
+          inputEl.focus();
+          inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length);
+        }
+      }
+
       function getFileName(path) {
         return path.split(/[\\\\/]/).pop();
       }
@@ -4398,7 +4570,8 @@ function getScript(mermaidUri: string): string {
 
         for (var i = 0; i < checkLines; i++) {
           var line = lines[i];
-          if (line.startsWith('+') || line.startsWith('-') || line.startsWith('@@')) {
+          // Exclude CSS custom properties (--var) from diff detection
+          if (line.startsWith('+') || (line.startsWith('-') && !line.startsWith('--')) || line.startsWith('@@')) {
             diffMarkers++;
           }
         }

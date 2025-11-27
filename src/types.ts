@@ -3,6 +3,7 @@ export type ThinkingLevel = 'none' | 'low' | 'medium' | 'high';
 export type AccessLevel = 'read-only' | 'ask-permission' | 'full-access';
 export type ContextMode = 'auto' | 'manual';
 export type ProviderType = 'claude-code' | 'openai-codex';
+export type AutocompleteType = 'sentence' | 'paragraph' | 'message';
 
 // Agent and Brainstorm types
 export type AgentType = 'claude-code' | 'openai-codex';

@@ -83,6 +83,20 @@ export class ProviderManager {
   }
 
   /**
+   * Get the default model for a specific provider
+   * Used in brainstorm mode to ensure each provider uses its own compatible model
+   */
+  public getProviderDefaultModel(providerId: string): string {
+    const provider = this._registry.get(providerId);
+    if (provider) {
+      return provider.config.defaultModel;
+    }
+    // Fallback to global default
+    const config = vscode.workspace.getConfiguration('mysti');
+    return config.get<string>('model', 'claude-sonnet-4-5-20250929');
+  }
+
+  /**
    * Get the provider registry (for advanced use cases like brainstorm)
    */
   public getRegistry(): ProviderRegistry {

@@ -210,7 +210,7 @@ export class BrainstormManager {
         agent.id,
         query,
         context,
-        { ...settings, provider: agent.id },
+        { ...settings, provider: agent.id, model: this._providerManager.getProviderDefaultModel(agent.id) },
         null,
         agent.persona
       );
@@ -280,7 +280,7 @@ export class BrainstormManager {
           agent.id,
           reviewPrompt,
           context,
-          { ...settings, provider: agent.id },
+          { ...settings, provider: agent.id, model: this._providerManager.getProviderDefaultModel(agent.id) },
           null,
           agent.persona
         );
@@ -363,7 +363,7 @@ export class BrainstormManager {
       synthesisAgentId,
       synthesisPrompt,
       context,
-      { ...settings, provider: synthesisAgentId },
+      { ...settings, provider: synthesisAgentId, model: this._providerManager.getProviderDefaultModel(synthesisAgentId) },
       null
     );
 
@@ -426,27 +426,42 @@ export class BrainstormManager {
 
   /**
    * Interleave chunks from multiple async generators
+   * Fixed: Track pending promises to avoid losing chunks when Promise.race returns
    */
   private async *_interleaveGenerators(
     generators: AsyncGenerator<BrainstormStreamChunk>[]
   ): AsyncGenerator<BrainstormStreamChunk> {
+    type IteratorType = AsyncIterator<BrainstormStreamChunk>;
+    type PromiseType = Promise<{ iterator: IteratorType; result: IteratorResult<BrainstormStreamChunk> }>;
+
     const iterators = generators.map(g => g[Symbol.asyncIterator]());
-    const active = new Set(iterators);
+    const active = new Set<IteratorType>(iterators);
+    const pending = new Map<IteratorType, PromiseType>();
+
+    // Initialize pending promises for all iterators
+    for (const iterator of iterators) {
+      pending.set(iterator, iterator.next().then(result => ({ iterator, result })));
+    }
 
     while (active.size > 0) {
-      // Create promises for the next value from each active iterator
-      const promises = Array.from(active).map(async (iterator) => {
-        const result = await iterator.next();
-        return { iterator, result };
-      });
+      // Only race on active iterators that have pending promises
+      const activePending = Array.from(active)
+        .filter(it => pending.has(it))
+        .map(it => pending.get(it)!);
 
-      // Wait for any one to complete
-      const { iterator, result } = await Promise.race(promises);
+      if (activePending.length === 0) break;
+
+      const { iterator, result } = await Promise.race(activePending);
+
+      // Remove from pending since it completed
+      pending.delete(iterator);
 
       if (result.done) {
         active.delete(iterator);
       } else {
         yield result.value;
+        // Create new pending promise for this iterator
+        pending.set(iterator, iterator.next().then(r => ({ iterator, result: r })));
       }
     }
   }

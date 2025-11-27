@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { spawn } from 'child_process';
+import { spawn, ChildProcess } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -8,12 +8,70 @@ import type { QuickActionSuggestion, SuggestionColor, Conversation, Message } fr
 const COLORS: SuggestionColor[] = ['blue', 'green', 'purple', 'orange', 'indigo', 'teal'];
 const ICONS = ['💡', '🔧', '📝', '🚀', '✨', '🎯'];
 
+/**
+ * SuggestionManager - Generates AI-powered quick action suggestions using Claude Haiku 4.5
+ * Uses pre-spawned CLI processes to eliminate spawn latency
+ * No API key needed - uses existing Claude Code authentication
+ */
 export class SuggestionManager {
   private _extensionContext: vscode.ExtensionContext;
-  private _currentProcess: ReturnType<typeof spawn> | null = null;
+  private _currentProcess: ChildProcess | null = null;
+  private _warmProcess: ChildProcess | null = null;
+  private _claudePath: string;
+  private _isSpawning: boolean = false;
 
   constructor(context: vscode.ExtensionContext) {
     this._extensionContext = context;
+    this._claudePath = this._findClaudeCliPath();
+
+    // Pre-spawn a warm process immediately
+    this._spawnWarmProcess();
+
+    console.log('[Mysti] SuggestionManager initialized with pre-spawn CLI');
+  }
+
+  /**
+   * Pre-spawn a Claude CLI process that's ready and waiting for stdin
+   * This eliminates the ~500ms spawn overhead from the critical path
+   */
+  private _spawnWarmProcess(): void {
+    if (this._isSpawning || this._warmProcess) {
+      return;
+    }
+
+    this._isSpawning = true;
+
+    try {
+      this._warmProcess = spawn(this._claudePath, [
+        '--print',
+        '--output-format', 'text',
+        '--model', 'claude-haiku-4-5-20251001'
+      ], {
+        stdio: ['pipe', 'pipe', 'pipe']
+      });
+
+      // Handle process errors - respawn on failure
+      this._warmProcess.on('error', (err) => {
+        console.error('[Mysti] Suggestion warm process error:', err);
+        this._warmProcess = null;
+        this._isSpawning = false;
+      });
+
+      // Handle unexpected close
+      this._warmProcess.on('close', (code) => {
+        if (code !== 0 && code !== null) {
+          console.log('[Mysti] Suggestion warm process closed with code:', code);
+        }
+        this._warmProcess = null;
+        this._isSpawning = false;
+      });
+
+      this._isSpawning = false;
+      console.log('[Mysti] Suggestion warm process spawned and ready');
+    } catch (error) {
+      console.error('[Mysti] Failed to spawn suggestion warm process:', error);
+      this._isSpawning = false;
+    }
   }
 
   public async generateSuggestions(
@@ -48,38 +106,52 @@ Rules:
 Return ONLY JSON array, no other text.`;
 
     return new Promise((resolve, reject) => {
-      const claudePath = this._findClaudeCliPath();
-      console.log('[Mysti] Using Claude CLI path:', claudePath);
+      // Use warm process if available
+      let proc: ChildProcess | null = null;
 
-      // Use default model (faster)
-      const args = ['--print', '--output-format', 'text'];
+      if (this._warmProcess) {
+        proc = this._warmProcess;
+        this._warmProcess = null;
+        console.log('[Mysti] Using warm process for suggestions');
+      } else {
+        // Fall back to spawning a new process
+        console.log('[Mysti] No warm process, spawning new one for suggestions');
+        proc = spawn(this._claudePath, [
+          '--print',
+          '--output-format', 'text',
+          '--model', 'claude-haiku-4-5-20251001'
+        ], { stdio: ['pipe', 'pipe', 'pipe'] });
+      }
 
-      this._currentProcess = spawn(claudePath, args, { stdio: ['pipe', 'pipe', 'pipe'] });
+      this._currentProcess = proc;
 
       let output = '';
       let stderr = '';
 
-      this._currentProcess.stdin?.write(prompt);
-      this._currentProcess.stdin?.end();
+      proc.stdin?.write(prompt);
+      proc.stdin?.end();
 
-      this._currentProcess.stdout?.on('data', (data) => {
+      proc.stdout?.on('data', (data) => {
         output += data.toString();
       });
 
-      this._currentProcess.stderr?.on('data', (data) => {
+      proc.stderr?.on('data', (data) => {
         stderr += data.toString();
       });
 
-      // Increase timeout to 20 seconds for response
+      // Timeout after 10 seconds (faster model = shorter timeout)
       const timeout = setTimeout(() => {
-        console.error('[Mysti] Suggestion generation timed out after 20s');
-        this._currentProcess?.kill('SIGTERM');
+        console.error('[Mysti] Suggestion generation timed out after 10s');
+        proc?.kill('SIGTERM');
         reject(new Error('Timeout'));
-      }, 20000);
+      }, 10000);
 
-      this._currentProcess.on('close', (code) => {
+      proc.on('close', (code) => {
         clearTimeout(timeout);
         this._currentProcess = null;
+
+        // Immediately respawn for next request
+        this._spawnWarmProcess();
 
         console.log('[Mysti] Claude exited with code:', code);
         if (stderr) {
@@ -115,9 +187,11 @@ Return ONLY JSON array, no other text.`;
         reject(new Error(`Failed to parse (code: ${code})`));
       });
 
-      this._currentProcess.on('error', (err) => {
+      proc.on('error', (err) => {
         clearTimeout(timeout);
         this._currentProcess = null;
+        // Respawn on error
+        this._spawnWarmProcess();
         console.error('[Mysti] Spawn error:', err);
         reject(err);
       });
@@ -143,6 +217,17 @@ Return ONLY JSON array, no other text.`;
     // No-op - kept for API compatibility
   }
 
+  /**
+   * Dispose the manager - kill processes
+   */
+  public dispose(): void {
+    this.cancelGeneration();
+    if (this._warmProcess) {
+      this._warmProcess.kill('SIGTERM');
+      this._warmProcess = null;
+    }
+  }
+
   private _findClaudeCliPath(): string {
     const config = vscode.workspace.getConfiguration('mysti');
     const configuredPath = config.get<string>('claudeCodePath', 'claude');
@@ -165,6 +250,7 @@ Return ONLY JSON array, no other text.`;
         for (const ext of claudeExtensions) {
           const binaryPath = path.join(extensionsDir, ext, 'resources', 'native-binary', 'claude');
           if (fs.existsSync(binaryPath)) {
+            console.log('[Mysti] Found Claude CLI at:', binaryPath);
             return binaryPath;
           }
         }
