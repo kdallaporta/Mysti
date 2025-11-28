@@ -44,7 +44,7 @@ export function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.
             <!-- Populated dynamically -->
           </div>
         </div>
-        <button id="new-chat-btn" class="icon-btn" title="New conversation">
+        <button id="new-chat-btn" class="icon-btn" title="Open in new tab">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
             <path d="M8 1a.5.5 0 0 1 .5.5v6h6a.5.5 0 0 1 0 1h-6v6a.5.5 0 0 1-1 0v-6h-6a.5.5 0 0 1 0-1h6v-6A.5.5 0 0 1 8 1z"/>
           </svg>
@@ -992,18 +992,19 @@ function getStyles(): string {
     }
 
     .mode-indicator {
-      font-size: 10px;
+      display: flex;
+      align-items: center;
+      font-size: 11px;
       color: var(--vscode-descriptionForeground);
-      padding: 2px 8px;
-      background: var(--vscode-badge-background);
-      border-radius: 10px;
+      padding: 4px 8px;
+      background: var(--vscode-button-secondaryBackground);
+      border-radius: 6px;
       cursor: pointer;
       transition: background-color 0.15s ease;
     }
 
     .mode-indicator:hover {
-      background: var(--vscode-button-secondaryHoverBackground, var(--vscode-badge-background));
-      color: var(--vscode-button-secondaryForeground, var(--vscode-descriptionForeground));
+      background: var(--vscode-button-secondaryHoverBackground);
     }
 
     .input-container {
@@ -1063,12 +1064,14 @@ function getStyles(): string {
       background: var(--vscode-button-background);
       color: var(--vscode-button-foreground);
       border: none;
-      padding: 8px;
+      padding: 8px 10px;
       border-radius: 8px;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
+      min-height: 36px;
+      align-self: flex-end;
     }
 
     .send-btn:hover {
@@ -1079,12 +1082,14 @@ function getStyles(): string {
       background: var(--vscode-errorForeground, #f14c4c);
       color: var(--vscode-button-foreground, white);
       border: none;
-      padding: 8px;
+      padding: 8px 10px;
       border-radius: 8px;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
+      min-height: 36px;
+      align-self: flex-end;
     }
 
     .stop-btn:hover {
@@ -1154,10 +1159,14 @@ function getStyles(): string {
       align-items: center;
       gap: 4px;
       padding: 4px 8px;
-      background: var(--vscode-input-background);
+      background: var(--vscode-button-secondaryBackground);
       border-radius: 6px;
       font-size: 11px;
       color: var(--vscode-descriptionForeground);
+    }
+
+    .context-usage:hover {
+      background: var(--vscode-button-secondaryHoverBackground);
     }
 
     .context-pie {
@@ -4260,8 +4269,7 @@ function getScript(mermaidUri: string, logoUri: string): string {
       });
 
       newChatBtn.addEventListener('click', function() {
-        postMessageWithPanelId({ type: 'newConversation' });
-        clearMessages();
+        postMessageWithPanelId({ type: 'openInNewTab' });
       });
 
       // History menu toggle
