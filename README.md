@@ -215,7 +215,15 @@ Contributions are welcome! Please read our contributing guidelines before submit
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the **Business Source License 1.1 (BSL 1.1)**.
+
+- **Non-commercial use**: Free for personal, educational, and non-profit use
+- **Commercial use**: Requires a separate commercial license
+- **Change Date**: December 1, 2029 (converts to MIT License)
+
+See the [LICENSE](LICENSE) file for full details.
+
+For commercial licensing inquiries, please contact the author.
 
 ---
 
