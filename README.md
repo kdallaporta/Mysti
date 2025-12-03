@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="#-brainstorm-mode">Brainstorm</a> •
+  <a href="#-brainstorm-mode---two-ai-giants-one-solution">Brainstorm</a> •
   <a href="#-key-features">Features</a> •
   <a href="#-requirements">Requirements</a> •
   <a href="#-quick-start">Quick Start</a> •
@@ -19,32 +19,23 @@
 
 ---
 
-## See It In Action
+## Brainstorm Mode - Two AI Giants, One Solution
+
+**This is where Mysti shines.** Stop settling for one AI's opinion. With Brainstorm Mode, **Claude Code and OpenAI Codex work together** as a collaborative team to solve your coding problems.
 
 <p align="center">
-  <img src="docs/screenshots/user-experience.png" alt="Mysti Chat Interface" width="700">
+  <img src="docs/screenshots/plan-mode.png" alt="Brainstorm Mode in Action" width="700">
 </p>
 
-<p align="center"><em>Beautiful, modern chat interface with syntax highlighting and markdown support</em></p>
+### Why Two AIs Are Better Than One
 
----
+**Claude Code** (Anthropic) and **Codex** (OpenAI) have different training, different strengths, and different blind spots. When they work together:
 
-## Why Mysti?
+- **Claude** might catch edge cases that Codex misses
+- **Codex** might suggest a more idiomatic approach Claude overlooked
+- **Together** they debate, challenge each other, and synthesize the best solution
 
-**Stop relying on a single AI.** Mysti lets you harness the power of multiple AI coding agents working as a team.
-
-| Single AI | Mysti's Team Approach |
-|-----------|----------------------|
-| One perspective | Multiple AI perspectives |
-| One solution | Debated, refined solutions |
-| Fixed behavior | 16 personas + 12 skills |
-| Take it or leave it | Choose your preferred approach |
-
----
-
-## Brainstorm Mode
-
-**This is where Mysti shines.** Instead of relying on one AI, get a **team of AI agents** working on your problem.
+It's like having a senior dev and a tech lead review your code simultaneously - except they actually talk to each other first.
 
 ### How It Works
 
@@ -72,15 +63,47 @@ Your Request
 +---------------------------+
 ```
 
-### Two Modes
+### Two Collaboration Modes
 
 | Quick Mode | Full Mode |
 |------------|-----------|
 | Direct synthesis | Agents discuss first |
-| Faster results | More thorough |
-| Good for simple tasks | Best for complex problems |
+| Claude + Codex respond, then merge | Each AI critiques the other's solution |
+| Faster results | More thorough analysis |
+| Good for simple tasks | Best for complex architecture decisions |
 
-**Requires both Claude Code and Codex CLIs installed.**
+### Intelligent Plan Detection
+
+When the AI presents multiple implementation approaches, Mysti automatically detects them and lets you choose your preferred path.
+
+<p align="center">
+  <img src="docs/screenshots/plan-suggestions.png" alt="Plan Suggestions" width="600">
+</p>
+
+**Requires both Claude Code and Codex CLIs installed.** See [Requirements](#-requirements).
+
+---
+
+## Why Mysti?
+
+**Stop relying on a single AI.** Mysti lets you harness the power of multiple AI coding agents working as a team.
+
+| Single AI | Mysti's Team Approach |
+|-----------|----------------------|
+| One perspective | Multiple AI perspectives |
+| One solution | Debated, refined solutions |
+| Fixed behavior | 16 personas + 12 skills |
+| Take it or leave it | Choose your preferred approach |
+
+---
+
+## See It In Action
+
+<p align="center">
+  <img src="docs/screenshots/user-experience.png" alt="Mysti Chat Interface" width="700">
+</p>
+
+<p align="center"><em>Beautiful, modern chat interface with syntax highlighting and markdown support</em></p>
 
 ---
 
@@ -122,26 +145,6 @@ Select personas directly from the toolbar without opening panels.
 
 <p align="center">
   <img src="docs/screenshots/persona-toolbar.png" alt="Toolbar Persona Selection" width="550">
-</p>
-
----
-
-### Intelligent Plan Detection
-
-When the AI presents multiple approaches, Mysti detects them and lets you choose.
-
-<p align="center">
-  <img src="docs/screenshots/plan-suggestions.png" alt="Plan Suggestions" width="550">
-</p>
-
----
-
-### Powerful Plan Mode
-
-Execute plans with full control - ask before editing, auto-edit, or plan only.
-
-<p align="center">
-  <img src="docs/screenshots/plan-mode.png" alt="Plan Mode" width="550">
 </p>
 
 ---

@@ -5116,7 +5116,7 @@ function getScript(mermaidUri: string, logoUri: string, iconUris: Record<string,
       const historyBtn = document.getElementById('history-btn');
       const historyMenu = document.getElementById('history-menu');
 
-      // Welcome screen suggestions
+      // Welcome screen suggestions with auto-persona and skills configuration
       var WELCOME_SUGGESTIONS = [
   {
     "id": "understand",
@@ -5133,7 +5133,9 @@ function getScript(mermaidUri: string, logoUri: string, iconUris: Record<string,
       }
     ],
     "icon": "magnifier",
-    "color": "blue"
+    "color": "blue",
+    "suggestedPersona": "architect",
+    "suggestedSkills": ["organized", "repo-hygiene", "first-principles", "doc-reflexes"]
   },
   {
     "id": "review",
@@ -5150,7 +5152,9 @@ function getScript(mermaidUri: string, logoUri: string, iconUris: Record<string,
       }
     ],
     "icon": "eye",
-    "color": "purple"
+    "color": "purple",
+    "suggestedPersona": "refactorer",
+    "suggestedSkills": ["scope-discipline", "doc-reflexes", "first-principles", "test-driven", "organized"]
   },
   {
     "id": "cleanup",
@@ -5167,7 +5171,9 @@ function getScript(mermaidUri: string, logoUri: string, iconUris: Record<string,
       }
     ],
     "icon": "brush",
-    "color": "green"
+    "color": "green",
+    "suggestedPersona": "refactorer",
+    "suggestedSkills": ["repo-hygiene", "organized", "scope-discipline", "auto-commit"]
   },
   {
     "id": "tests",
@@ -5184,7 +5190,9 @@ function getScript(mermaidUri: string, logoUri: string, iconUris: Record<string,
       }
     ],
     "icon": "lab",
-    "color": "teal"
+    "color": "teal",
+    "suggestedPersona": "debugger",
+    "suggestedSkills": ["test-driven", "scope-discipline", "organized", "first-principles"]
   },
   {
     "id": "security",
@@ -5201,7 +5209,9 @@ function getScript(mermaidUri: string, logoUri: string, iconUris: Record<string,
       }
     ],
     "icon": "lock",
-    "color": "red"
+    "color": "red",
+    "suggestedPersona": "security",
+    "suggestedSkills": ["first-principles", "scope-discipline", "doc-reflexes", "organized", "dependency-aware"]
   },
   {
     "id": "performance",
@@ -5218,7 +5228,9 @@ function getScript(mermaidUri: string, logoUri: string, iconUris: Record<string,
       }
     ],
     "icon": "flash",
-    "color": "amber"
+    "color": "amber",
+    "suggestedPersona": "performance",
+    "suggestedSkills": ["first-principles", "test-driven", "scope-discipline", "organized"]
   },
   {
     "id": "docs",
@@ -5235,7 +5247,9 @@ function getScript(mermaidUri: string, logoUri: string, iconUris: Record<string,
       }
     ],
     "icon": "notes",
-    "color": "indigo"
+    "color": "indigo",
+    "suggestedPersona": "mentor",
+    "suggestedSkills": ["doc-reflexes", "organized", "concise", "first-principles"]
   },
   {
     "id": "refactor",
@@ -5252,7 +5266,9 @@ function getScript(mermaidUri: string, logoUri: string, iconUris: Record<string,
       }
     ],
     "icon": "recycle",
-    "color": "orange"
+    "color": "orange",
+    "suggestedPersona": "refactorer",
+    "suggestedSkills": ["first-principles", "scope-discipline", "test-driven", "organized", "repo-hygiene"]
   },
   {
     "id": "production",
@@ -5269,7 +5285,9 @@ function getScript(mermaidUri: string, logoUri: string, iconUris: Record<string,
       }
     ],
     "icon": "rocket",
-    "color": "green"
+    "color": "green",
+    "suggestedPersona": "devops",
+    "suggestedSkills": ["graceful-degradation", "rollback-ready", "test-driven", "doc-reflexes", "dependency-aware"]
   },
   {
     "id": "deploy",
@@ -5286,7 +5304,9 @@ function getScript(mermaidUri: string, logoUri: string, iconUris: Record<string,
       }
     ],
     "icon": "package",
-    "color": "purple"
+    "color": "purple",
+    "suggestedPersona": "devops",
+    "suggestedSkills": ["auto-commit", "rollback-ready", "organized", "doc-reflexes", "dependency-aware"]
   },
   {
     "id": "compliance",
@@ -5303,7 +5323,9 @@ function getScript(mermaidUri: string, logoUri: string, iconUris: Record<string,
       }
     ],
     "icon": "check",
-    "color": "blue"
+    "color": "blue",
+    "suggestedPersona": "security",
+    "suggestedSkills": ["doc-reflexes", "scope-discipline", "organized", "first-principles", "dependency-aware"]
   },
   {
     "id": "debug",
@@ -5320,7 +5342,9 @@ function getScript(mermaidUri: string, logoUri: string, iconUris: Record<string,
       }
     ],
     "icon": "bug",
-    "color": "red"
+    "color": "red",
+    "suggestedPersona": "debugger",
+    "suggestedSkills": ["first-principles", "test-driven", "scope-discipline", "organized", "concise"]
   }
 ];
 
@@ -5363,12 +5387,15 @@ function getScript(mermaidUri: string, logoUri: string, iconUris: Record<string,
           card.onclick = function() {
             // Get provider-specific message at click time (provider may have changed)
             var message = getProviderMessage(s, state.settings.provider);
+            // Send with suggested persona and skills for auto-configuration
             postMessageWithPanelId({
-              type: 'sendMessage',
+              type: 'quickActionWithConfig',
               payload: {
                 content: message,
                 context: state.context,
-                settings: state.settings
+                settings: state.settings,
+                suggestedPersona: s.suggestedPersona || null,
+                suggestedSkills: s.suggestedSkills || []
               }
             });
           };
@@ -6431,7 +6458,14 @@ function getScript(mermaidUri: string, logoUri: string, iconUris: Record<string,
             renderAgentConfigPanel();
             break;
           case 'agentConfigUpdated':
-            // Confirmation that config was saved
+            // Update local state with new config (e.g., from quick action auto-selection)
+            if (message.payload) {
+              state.agentConfig = {
+                personaId: message.payload.personaId || null,
+                enabledSkills: message.payload.enabledSkills || []
+              };
+              renderAgentConfigPanel();
+            }
             break;
           case 'agentRecommendations':
             renderRecommendations(message.payload);

@@ -223,6 +223,48 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         );
         break;
 
+      case 'quickActionWithConfig':
+        {
+          const panelId = (message as any).panelId;
+          const payload = message.payload as {
+            content: string;
+            context: ContextItem[];
+            settings: Settings;
+            suggestedPersona: string | null;
+            suggestedSkills: string[];
+          };
+
+          // Apply auto-selected persona and skills configuration
+          if (panelId && (payload.suggestedPersona || payload.suggestedSkills?.length)) {
+            const newConfig: AgentConfiguration = {
+              personaId: (payload.suggestedPersona as AgentConfiguration['personaId']) || null,
+              enabledSkills: (payload.suggestedSkills as AgentConfiguration['enabledSkills']) || []
+            };
+
+            // Save config to conversation
+            this._conversationManager.updateAgentConfig(panelId, newConfig);
+
+            // Notify webview to update UI
+            this._postToPanel(panelId, {
+              type: 'agentConfigUpdated',
+              payload: newConfig
+            });
+
+            console.log('[Mysti] Quick action auto-configured persona:', payload.suggestedPersona, 'skills:', payload.suggestedSkills);
+          }
+
+          // Send the message as usual
+          await this._handleSendMessage(
+            {
+              content: payload.content,
+              context: payload.context,
+              settings: payload.settings
+            },
+            panelId
+          );
+        }
+        break;
+
       case 'cancelRequest':
         {
           const panelId = (message as any).panelId;
