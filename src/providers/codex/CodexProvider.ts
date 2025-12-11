@@ -64,15 +64,27 @@ export class CodexProvider extends BaseCliProvider {
     displayName: 'OpenAI Codex',
     models: [
       {
-        id: 'gpt-5.1-codex',
-        name: 'GPT-5.1 Codex',
-        description: 'Latest model optimized for coding',
+        id: 'gpt-5.2',
+        name: 'GPT-5.2',
+        description: 'Latest model, best for professional tasks',
         contextWindow: 1000000
       },
       {
-        id: 'gpt-5-codex',
-        name: 'GPT-5 Codex',
-        description: 'Stable model for coding tasks',
+        id: 'gpt-5.2-thinking',
+        name: 'GPT-5.2 Thinking',
+        description: 'Better at coding and planning',
+        contextWindow: 1000000
+      },
+      {
+        id: 'gpt-5.2-instant',
+        name: 'GPT-5.2 Instant',
+        description: 'Faster for writing and information seeking',
+        contextWindow: 1000000
+      },
+      {
+        id: 'gpt-5.1-codex',
+        name: 'GPT-5.1 Codex',
+        description: 'Previous generation coding model',
         contextWindow: 1000000
       },
       {
@@ -88,7 +100,7 @@ export class CodexProvider extends BaseCliProvider {
         contextWindow: 200000
       }
     ],
-    defaultModel: 'gpt-5.1-codex'
+    defaultModel: 'gpt-5.2'
   };
 
   readonly capabilities: ProviderCapabilities = {

@@ -52,8 +52,8 @@ export class ClaudeCodeProvider extends BaseCliProvider {
         contextWindow: 200000
       },
       {
-        id: 'claude-3-5-haiku-20241022',
-        name: 'Claude 3.5 Haiku',
+        id: 'claude-haiku-4-5-20251015',
+        name: 'Claude Haiku 4.5',
         description: 'Fast and efficient for simpler tasks',
         contextWindow: 200000
       }

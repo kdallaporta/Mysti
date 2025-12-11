@@ -41,9 +41,15 @@ export class GeminiProvider extends BaseCliProvider {
     displayName: 'Gemini',
     models: [
       {
-        id: 'gemini-3-pro-preview',
+        id: 'gemini-3-pro',
         name: 'Gemini 3 Pro',
         description: 'Most intelligent, best for complex multimodal tasks',
+        contextWindow: 1048576
+      },
+      {
+        id: 'gemini-3-deep-think',
+        name: 'Gemini 3 Deep Think',
+        description: 'Advanced reasoning for complex problems',
         contextWindow: 1048576
       },
       {
@@ -65,7 +71,7 @@ export class GeminiProvider extends BaseCliProvider {
         contextWindow: 1048576
       }
     ],
-    defaultModel: 'gemini-2.5-flash'
+    defaultModel: 'gemini-3-pro'
   };
 
   readonly capabilities: ProviderCapabilities = {
