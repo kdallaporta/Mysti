@@ -393,5 +393,5 @@ Contact [baha@deepmyst.com](mailto:baha@deepmyst.com) for commercial licensing.
 
 <p align="center">
   <strong>Mysti</strong> — Built by <a href="https://deepmyst.com">DeepMyst Inc</a><br>
-  <sub>Made with Claude Code</sub>
+  <sub>Made with Mysti/sub>
 </p>

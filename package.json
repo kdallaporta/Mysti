@@ -2,7 +2,7 @@
   "name": "mysti",
   "displayName": "Mysti - AI Coding Agent",
   "description": "Multi-agent AI coding assistant. Claude Code, Codex, and Gemini brainstorm together, debate approaches, and deliver superior solutions. Like Cursor & Copilot, but with collaborative AI agents.",
-  "version": "0.1.15",
+  "version": "0.2.0",
   "publisher": "DeepMyst",
   "author": {
     "name": "Baha Abunojaim",
@@ -52,7 +52,17 @@
   ],
   "license": "BUSL-1.1",
   "activationEvents": [
-    "onStartupFinished"
+    "onStartupFinished",
+    "workspaceContains:claude.md",
+    "workspaceContains:CLAUDE.md",
+    "workspaceContains:gemini.yaml",
+    "workspaceContains:codex.json",
+    "workspaceContains:agents.yaml",
+    "workspaceContains:.mysti/config.json",
+    "workspaceContains:.mysti/agents.yaml",
+    "workspaceContains:.claude/**",
+    "workspaceContains:.gemini/**",
+    "workspaceContains:.openai/**"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -77,17 +87,20 @@
     "commands": [
       {
         "command": "mysti.openChat",
-        "title": "Open Mysti Chat",
+        "title": "Open Chat",
+        "shortTitle": "Chat",
         "category": "Mysti"
       },
       {
         "command": "mysti.newConversation",
         "title": "New Conversation",
+        "shortTitle": "New",
         "category": "Mysti"
       },
       {
         "command": "mysti.addToContext",
-        "title": "Add to Mysti Context",
+        "title": "Add to Context",
+        "shortTitle": "Add Context",
         "category": "Mysti"
       },
       {
@@ -97,7 +110,8 @@
       },
       {
         "command": "mysti.openInNewTab",
-        "title": "Open Mysti in New Tab",
+        "title": "Open in Editor Tab",
+        "shortTitle": "New Tab",
         "category": "Mysti",
         "icon": {
           "light": "resources/Mysti-Logo.png",
@@ -154,11 +168,11 @@
             "google-gemini"
           ],
           "enumDescriptions": [
-            "Claude Code CLI (Anthropic)",
-            "OpenAI Codex CLI",
-            "Google Gemini CLI"
+            "Claude Code CLI (Anthropic) - Deep reasoning, complex refactoring, thorough analysis",
+            "OpenAI Codex CLI - Quick iterations, familiar GPT style, rapid prototyping",
+            "Google Gemini CLI - Fast responses, Google ecosystem integration"
           ],
-          "description": "Default AI provider to use"
+          "description": "Primary AI provider for coding assistance. Switch providers anytime without losing context."
         },
         "mysti.claudeCodePath": {
           "type": "string",
@@ -209,17 +223,22 @@
             "ask-permission",
             "full-access"
           ],
-          "description": "Default access level for file operations"
+          "enumDescriptions": [
+            "AI can only read files, never modify - safest option for exploring codebases",
+            "AI asks before each file change - balanced control and productivity",
+            "AI can edit files autonomously - maximum speed for trusted tasks"
+          ],
+          "description": "Control what the AI can do with your files. Choose based on your trust level and task requirements."
         },
         "mysti.autoContext": {
           "type": "boolean",
           "default": true,
-          "description": "Automatically include relevant context"
+          "description": "Automatically include open files and selections as context for better AI responses"
         },
         "mysti.brainstorm.enabled": {
           "type": "boolean",
           "default": false,
-          "description": "Enable brainstorm mode for multi-agent collaboration"
+          "description": "Enable multi-agent brainstorm mode where two AI providers collaborate, debate, and synthesize solutions"
         },
         "mysti.brainstorm.discussionMode": {
           "type": "string",
@@ -261,7 +280,7 @@
           "minItems": 2,
           "maxItems": 2,
           "uniqueItems": true,
-          "description": "Which 2 agents to use in brainstorm mode"
+          "description": "Select any 2 of 3 AI providers to collaborate in brainstorm mode. Different combinations offer unique strengths."
         },
         "mysti.agents.claudePersona": {
           "type": "string",
@@ -350,14 +369,14 @@
         "mysti.agents.autoSuggest": {
           "type": "boolean",
           "default": true,
-          "description": "Automatically suggest personas based on your message content"
+          "description": "Smart persona suggestions: Mysti analyzes your message and recommends the best persona (Architect, Debugger, etc.) for your task"
         },
         "mysti.agents.maxTokenBudget": {
           "type": "number",
           "default": 0,
           "minimum": 0,
           "maximum": 16000,
-          "description": "Maximum tokens for agent context (0 = unlimited, disabled by default)"
+          "description": "Limit tokens used for agent context. Set to 0 for unlimited (default). Use lower values to reduce API costs."
         },
         "mysti.permission.timeout": {
           "type": "number",
@@ -392,6 +411,38 @@
         "command": "mysti.openInNewTab",
         "key": "ctrl+shift+n",
         "mac": "cmd+shift+n"
+      }
+    ],
+    "languages": [
+      {
+        "id": "claude-prompt",
+        "extensions": [".claude.md"],
+        "aliases": ["Claude Prompt", "Claude MD"],
+        "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "prompt-markdown",
+        "extensions": [".prompt.md"],
+        "aliases": ["Prompt Markdown", "Prompt MD"],
+        "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "gpt-prompt",
+        "extensions": [".gpt.md"],
+        "aliases": ["GPT Prompt", "GPT MD"],
+        "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "gemini-prompt",
+        "extensions": [".gemini.md"],
+        "aliases": ["Gemini Prompt", "Gemini MD"],
+        "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "codex-prompt",
+        "extensions": [".codex.md"],
+        "aliases": ["Codex Prompt", "Codex MD"],
+        "configuration": "./language-configuration.json"
       }
     ]
   },

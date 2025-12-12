@@ -304,7 +304,7 @@ export function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.
         <div class="welcome-header">
           <img src="${logoUri}" alt="Mysti" class="welcome-logo" />
           <h2>Welcome to Mysti</h2>
-          <p>Your AI coding agent. Choose an action or ask anything!</p>
+          <p>Your AI coding team. Choose an action or ask anything!</p>
         </div>
         <div class="welcome-suggestions" id="welcome-suggestions"></div>
       </div>
@@ -10240,7 +10240,7 @@ function getScript(mermaidUri: string, logoUri: string, iconUris: Record<string,
       }
 
       function clearMessages() {
-        messagesEl.innerHTML = '<div class="welcome-container"><div class="welcome-header"><img src="' + LOGO_URI + '" alt="Mysti" class="welcome-logo" /><h2>Welcome to Mysti</h2><p>Your AI coding agent. Choose an action or ask anything!</p></div><div class="welcome-suggestions" id="welcome-suggestions"></div></div>';
+        messagesEl.innerHTML = '<div class="welcome-container"><div class="welcome-header"><img src="' + LOGO_URI + '" alt="Mysti" class="welcome-logo" /><h2>Welcome to Mysti</h2><p>Your AI coding team. Choose an action or ask anything!</p></div><div class="welcome-suggestions" id="welcome-suggestions"></div></div>';
         renderWelcomeSuggestions();
         // Reset all streaming buffers
         currentResponse = '';

@@ -9,13 +9,12 @@ Mysti is a VSCode extension providing a unified AI coding assistant interface su
 ## Build Commands
 
 ```bash
-npm run compile         # Production build (webpack)
-npm run watch           # Development build with watch mode
-npm run lint            # ESLint check
-npm run test            # Run tests
-npm run sync-agents     # Sync agent definitions from resources/agents
-npm run sync-agents:force  # Force sync, overwrite user changes
-npx vsce package        # Package extension as .vsix
+npm run compile           # Production build (webpack)
+npm run watch             # Development build with watch mode
+npm run lint              # ESLint check
+npm run sync-agents       # Sync agent definitions from resources/agents
+npm run sync-agents:force # Force sync, overwrite user changes
+npx vsce package          # Package extension as .vsix
 ```
 
 Output: `dist/extension.js` from entry point `src/extension.ts`
@@ -113,7 +112,12 @@ System-wide constants for timeouts, limits, and configuration:
 
 ## Webview UI
 
-`src/webview/webviewContent.ts` contains embedded HTML/CSS/JS (large file). Uses:
+Two large files handle the UI:
+
+- `src/providers/ChatViewProvider.ts` (~88KB) - Main webview coordinator, handles all message routing between extension and webview
+- `src/webview/webviewContent.ts` - Embedded HTML/CSS/JS for the chat interface
+
+Libraries:
 - Marked.js for markdown rendering
 - Prism.js for syntax highlighting
 - Mermaid.js for diagrams
